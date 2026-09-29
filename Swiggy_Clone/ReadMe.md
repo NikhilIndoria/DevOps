@@ -10,3 +10,11 @@ A. Define two ECS services: Blue and Green.
 B. Use CodeDeploy to deploy the new version of Swiggy-clone application to the Green service.
 C. After deployment, automate the ALB routing to gradually shift traffic from the Blue service to the Green service based on predefined health checks.
 D. Monitor the deployment process and rollback automatically if issues occur during the transition.
+
+Production deployment requirements
+
+- Configure CodeBuild with a Linux standard image that provides Node.js 22 and Docker, and enable privileged mode for Docker builds.
+- Configure the CodeBuild role to read the three Docker registry parameters and describe the active `swiggy` ECS task definition in `ap-south-1`.
+- Configure CodeDeploy for ECS blue/green deployments and grant its service role permission to register the task definition and pass its task and execution roles.
+- Keep the ECS task definition container named `swiggy` with container port `3000`; the pipeline copies the latest active `swiggy` task definition, replaces its image with the immutable build-number tag, and publishes it with `appspec.yaml`.
+- Set the load balancer target group's health check path to `/health` and configure the CodeDeploy deployment group with the production listener and both target groups.

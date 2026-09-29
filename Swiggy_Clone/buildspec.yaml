@@ -5,37 +5,23 @@ env:
     DOCKER_REGISTRY_USERNAME: /cicd/docker-credentials/username
     DOCKER_REGISTRY_PASSWORD: /cicd/docker-credentials/password
     DOCKER_REGISTRY_URL: /cicd/docker-registry/url
-    SONAR_TOKEN: /cicd/sonar/sonar-token
 phases:
   install:
     runtime-versions:
-      python: 3.11
-      java: corretto17
+      nodejs: 22
   pre_build:
     commands:
-      - echo "Installing dependencies..."
-      - echo "Performing Trivy file scan before building the image..."
-      # - wget https://github.com/aquasecurity/trivy/releases/download/v0.19.2/trivy_0.19.2_Linux-64bit.tar.gz
-      # - tar zxvf trivy_0.19.2_Linux-64bit.tar.gz
-      # - export PATH=$PATH:$PWD
-      # - trivy filesystem --exit-code 0 --no-progress . >> trivyfilescan.txt
-      # - echo "Downloading and installing OWASP Dependency-Check..."
-      # - wget https://github.com/jeremylong/DependencyCheck/releases/download/v7.0.2/dependency-check-7.0.2-release.zip
-      # - unzip dependency-check-7.0.2-release.zip
-      # - export SONAR_SCANNER_VERSION=4.7.0.2747
-      # - export SONAR_SCANNER_HOME=$HOME/.sonar/sonar-scanner-$SONAR_SCANNER_VERSION-linux
-      # - curl --create-dirs -sSLo $HOME/.sonar/sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-$SONAR_SCANNER_VERSION-linux.zip
-      # - unzip -o $HOME/.sonar/sonar-scanner.zip -d $HOME/.sonar/
-      # - export PATH=$SONAR_SCANNER_HOME/bin:$PATH
-      # - export SONAR_SCANNER_OPTS="-server"
+      - npm ci --legacy-peer-deps
+      - npm test -- --watchAll=false
+      - npm run build
+      - echo "$DOCKER_REGISTRY_PASSWORD" | docker login --username "$DOCKER_REGISTRY_USERNAME" --password-stdin "$DOCKER_REGISTRY_URL"
 
   build:
     commands:
-      - echo "Running tests..."
-      - echo "Building Docker image..."
-      # - echo "$DOCKER_REGISTRY_PASSWORD" | docker login -u "$DOCKER_REGISTRY_USERNAME" --password-stdin "$DOCKER_REGISTRY_URL"
-      # - docker build -t "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:latest" .
-      # - docker push "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:latest"
+      - docker build --file Dockerfile.yaml --tag "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:$CODEBUILD_BUILD_NUMBER" .
+      - docker push "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:$CODEBUILD_BUILD_NUMBER"
+      - aws ecs describe-task-definition --task-definition swiggy --region ap-south-1 --query taskDefinition --output json > taskdef.json
+      - IMAGE="$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/swiggy:$CODEBUILD_BUILD_NUMBER" node -e 'const fs = require("fs"); const task = JSON.parse(fs.readFileSync("taskdef.json", "utf8")); for (const key of ["taskDefinitionArn", "revision", "status", "requiresAttributes", "compatibilities", "registeredAt", "registeredBy"]) delete task[key]; const container = task.containerDefinitions.find((item) => item.name === "swiggy"); if (!container) throw new Error("Container swiggy is missing from the task definition"); if (!container.portMappings.some((mapping) => mapping.containerPort === 3000)) throw new Error("Container swiggy must expose port 3000"); container.image = process.env.IMAGE; fs.writeFileSync("taskdef.json", JSON.stringify(task, null, 2) + "\n");'
   # post_build:
   #   commands:
   #     - echo "Performing Trivy image scan after building the image..."
@@ -51,16 +37,7 @@ phases:
   #     #- aws ses send-email --from "nikhilindoria48@gmail.com" --to "madithatisreedhar123@gmail.com" --subject "CodeBuild Status: $CODEBUILD_BUILD_ID" --text "Build status: $CODEBUILD_BUILD_STATUS" --region "ap-south-1" 
   #     # Update with your preferred AWS region
 
-post_build:
-  commands:
-    - aws ses send-email \
-        --from "nikhilindoria48@gmail.com" \
-        --to "nikhilindoria48@gmail.com" \
-        --subject "CodeBuild Status: $CODEBUILD_BUILD_ID" \
-        --text "Build status: $CODEBUILD_BUILD_STATUS" \
-        --region "us-east-1" # Update with your preferred AWS region
-
-
 artifacts:
   files:
     - appspec.yaml
+    - taskdef.json
