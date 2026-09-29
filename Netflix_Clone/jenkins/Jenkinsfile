@@ -1,0 +1,89 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "netflix-ui"
+        REGISTRY = "amaggo/${IMAGE_NAME}"
+        TAG = "${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                echo "Checking out the repository configured for this Jenkins job..."
+                checkout scm
+            }
+        }
+
+        stage('OWASP Dependency Check') {
+            steps {
+                echo "🔹 Running OWASP Dependency Check..."
+                sh '''
+                    dependency-check.sh \
+                    --project netflix-ui \
+                    --scan ./application \
+                    --format HTML \
+                    --out owasp-report.html || true
+                '''
+            }
+        }
+
+        stage('Test Application') {
+            steps {
+                echo "🔹 Checking application JavaScript and required assets..."
+                dir('application') {
+                    sh 'node --check index.js'
+                    sh 'test -s index.html && test -s index.css && test -s fallback-poster.svg'
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo "🔹 Building Docker image..."
+                dir('application') {
+                    sh 'docker build -t $REGISTRY:$TAG .'
+                }
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                echo "🔹 Running Trivy image scan..."
+                sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL $REGISTRY:$TAG'
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                echo "🔹 Pushing image to Docker Hub..."
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                    sh '''
+                        echo $PASS | docker login -u $USER --password-stdin
+                        docker push $REGISTRY:$TAG
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                echo "🔹 Deploying to Kubernetes..."
+                sh '''
+                    kubectl apply -f k8s/deployment.yaml
+                    kubectl apply -f k8s/service.yaml
+                    kubectl set image deployment/netflix-ui netflix-ui=$REGISTRY:$TAG
+                    kubectl rollout status deployment/netflix-ui --timeout=180s
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "📄 Archiving OWASP scan report..."
+            archiveArtifacts artifacts: '**/*.html', allowEmptyArchive: true
+            echo "✅ Pipeline completed."
+        }
+    }
+}

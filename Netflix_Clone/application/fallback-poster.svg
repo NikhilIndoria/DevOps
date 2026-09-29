@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360">
+  <defs>
+    <linearGradient id="scene" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#171717" />
+      <stop offset="1" stop-color="#541116" />
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop stop-color="#e50914" stop-opacity=".8" />
+      <stop offset="1" stop-color="#e50914" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#scene)" />
+  <ellipse cx="420" cy="176" rx="190" ry="165" fill="url(#glow)" />
+  <path d="M0 292 147 192l93 61 102-135 105 120 78-65 115 96v91H0Z" fill="#090909" fill-opacity=".82" />
+  <path d="M300 270V96l40-22v196Zm72 0V74l40 22v174Z" fill="#e50914" />
+  <text x="42" y="324" fill="#f5f5f1" font-family="Arial,sans-serif" font-size="14" letter-spacing="4">NOW SHOWING</text>
+</svg>
